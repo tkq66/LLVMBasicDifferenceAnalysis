@@ -1,9 +1,9 @@
-int main () {
-    int a, b, c, sink, source;
-    b = source;
+int main() {
+    int a, b, c, d = 0;
     if (a > 0)
-        ;
+        c = 5;
     else
-        c = b;
-    sink = c;
+        c = 10;
+    if (b > 0)
+        d = -11;
 }

@@ -1,7 +1,5 @@
 # CS5218 - Program Analysis
-## Assignment 1 - Taint Analysis
-
-This program performs taint analysis over simple C programs, with strict requirements of the sink and source variable names.
+## Assignment 2 - Difference Analysis
 
 ## Dependencies
 
@@ -21,7 +19,6 @@ The files currently there are
 ```
 example1.c
 example2.c
-example3.c
 ```
 
 You can build this project by running
@@ -34,7 +31,7 @@ To run the analysis over the IR, you can run
 ```
 ./run.sh <file option>
 ```
-This will perform taint analysis on example1.c, example2.c, or example3.c (file option being 1, 2, or 3 respectively).
+This will perform difference analysis on example1.c or example2.c (file option being 1 or 2 respectively).
 
 ## Helpers
 

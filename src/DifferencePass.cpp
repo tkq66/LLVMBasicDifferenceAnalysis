@@ -1,8 +1,7 @@
 /**
- *  TaintPass.cpp
+ *  DifferencePass.cpp
  *
- *  Performs taint analysis on simple programs over an LLVM IR pass.
- *  Supported structures are if-else adn while loop.
+ *  Performs difference analysis on simple programs over an LLVM IR pass.
  *
  *  Created by CS5218 - Principles of Program Analysis
  *  Modified by Teekayu Klongtruajrok (A0174348X)
