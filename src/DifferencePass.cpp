@@ -44,8 +44,8 @@ enum AnalyzeLoopBackedgeSwtch {
     OFF
 };
 
-std::set<Instruction*> generateCFG (BasicBlock*, std::set<Instruction*>, std::stack<BasicBlock*>, AnalyzeLoopBackedgeSwtch);
-std::set<Instruction*> checkLeakage (BasicBlock*, std::set<Instruction*>);
+void generateCFG (BasicBlock*, ValueTracker valueTracker, std::stack<BasicBlock*>, AnalyzeLoopBackedgeSwtch);
+void checkLeakage (BasicBlock*, ValueTracker valueTracker);
 bool isSameBlock (BasicBlock*, BasicBlock*);
 bool isMainFunction (const char*);
 bool isBeginLoop (const char*);
@@ -67,13 +67,13 @@ int main (int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    std::set<Instruction*> secretVars;
+    ValueTracker valueTracker;
 
     for (auto &F: *M) {
         if (isMainFunction(F.getName().str().c_str())) {
             BasicBlock* BB = dyn_cast<BasicBlock>(F.begin());
             std::stack<BasicBlock*> loopCallStack;
-            generateCFG(BB, secretVars, loopCallStack, ON);
+            generateCFG(BB, valueTracker, loopCallStack, ON);
         }
     }
 
@@ -81,7 +81,7 @@ int main (int argc, char **argv) {
 }
 
 
-std::set<Instruction*> generateCFG (BasicBlock* BB, std::set<Instruction*> secretVars, std::stack<BasicBlock*> loopCallStack, AnalyzeLoopBackedgeSwtch backedgeSwitch) {
+void generateCFG (BasicBlock* BB, ValueTracker valueTracker, std::stack<BasicBlock*> loopCallStack, AnalyzeLoopBackedgeSwtch backedgeSwitch) {
   const char *blockName = BB->getName().str().c_str();
   printf("Label Name:%s\n", blockName);
 
@@ -100,13 +100,12 @@ std::set<Instruction*> generateCFG (BasicBlock* BB, std::set<Instruction*> secre
       newBackedgeSwitch = ON;
   }
 
-  std::set<Instruction*> newSecretVars = checkLeakage(BB,secretVars);
+  checkLeakage(BB, valueTracker);
 
   // Pass secretVars list to child BBs and check them
   const TerminatorInst *tInst = BB->getTerminator();
   int branchCount = tInst->getNumSuccessors();
 
-  std::set<Instruction*> consolidatedSecretVars(newSecretVars);
   for (int i = 0;  i < branchCount; ++i) {
       BasicBlock *next = tInst->getSuccessor(i);
       BasicBlock *prevLoopBegin = !newLoopCallStack.empty() ? newLoopCallStack.top() : nullptr;
@@ -114,7 +113,7 @@ std::set<Instruction*> generateCFG (BasicBlock* BB, std::set<Instruction*> secre
       // If still analyzing loop backedge and the loop is going past the calling point, stop this recursion
       if (isEndLoop(next->getName().str().c_str()) &&
           (newBackedgeSwitch == OFF)) {
-          return consolidatedSecretVars;
+          return;
       }
       // Analyze loop backedge by running through the loop one more time before ending
       // to complete taint analysis of variable dependencies
@@ -125,73 +124,28 @@ std::set<Instruction*> generateCFG (BasicBlock* BB, std::set<Instruction*> secre
           newBackedgeSwitch = OFF;
           // Run while cond again, now with knowledge of all the discovered secret var args of the first run,
           // and update the local secret var args context to propagate this knowledge to code after the loop
-          newSecretVars = generateCFG(prevLoopBegin, consolidatedSecretVars, newLoopCallStack, newBackedgeSwitch);
       }
       // Terminate looping condition to acheive least fixed point solution
       if (isSameBlock(prevLoopBegin, next)) {
-          return consolidatedSecretVars;
+          return;
       }
       // Analyze the next instruction and get all the discovered from that analysis context
-      std::set<Instruction*> contextDependentSecretVars =  generateCFG(next, newSecretVars, newLoopCallStack, newBackedgeSwitch);
-      // Consolidate all the secret vars from a given pass
-      consolidatedSecretVars.insert(contextDependentSecretVars.begin(), contextDependentSecretVars.end());
+      generateCFG(next, valueTracker, newLoopCallStack, newBackedgeSwitch);
   }
 
-  // Last Basic Block, check if secret leaks to public
-  if (branchCount == 0){
-    int flag = false;
-    for (auto &S: newSecretVars) {
-        if (isSinkVar(S->getName().str().c_str())) {
-            flag = true;
-        }
-    }
+  valueTracker.printTracker();
 
-    if (flag == true) {
-        printf(ANSI_COLOR_RED "OMG, Secret leaks to the Public"
-    	       ANSI_COLOR_RESET	"\n");
-    }
-    else {
-        printf(ANSI_COLOR_GREEN "Secret does not leak to the Public"
-    	       ANSI_COLOR_RESET	"\n");
-    }
-    printf("\n");
-  }
   // Propagate discovered secret var args from the current context
-  return consolidatedSecretVars;
+  return;
 }
 
-std::set<Instruction*> checkLeakage (BasicBlock* BB, std::set<Instruction*> secretVars) {
-    std::set<Instruction*> newSecretVars(secretVars);
-
+void checkLeakage (BasicBlock* BB, ValueTracker valueTracker) {
     // Loop through instructions in BB
     for (auto &I: *BB) {
-        // Add secret variable to newSecretVars
-        if (isSourceVar(I.getName().str().c_str())) {
-            newSecretVars.insert(dyn_cast<Instruction>(&I));
-        }
-
-        if (isa<StoreInst>(I)) {
-            // Check store instructions
-            Value* v = I.getOperand(0);
-            Instruction* op1 = dyn_cast<Instruction>(v);
-            if (op1 != nullptr && newSecretVars.find(op1) != newSecretVars.end()) {
-                newSecretVars.insert(dyn_cast<Instruction>(I.getOperand(1)));
-            }
-        }
-        else {
-            // Check all other instructions
-            for (auto op = I.op_begin(); op != I.op_end(); op++) {
-                Value* v = op->get();
-                Instruction* inst = dyn_cast<Instruction>(v);
-                if (inst != nullptr && newSecretVars.find(inst) != newSecretVars.end()) {
-                    newSecretVars.insert(dyn_cast<Instruction>(&I));
-                }
-            }
-        }
+        valueTracker.processNewEntry(&I);
+        valueTracker.printTracker();
     }
-
-    printVars(newSecretVars);
-    return newSecretVars;
+    return;
 }
 
 bool isSameBlock (BasicBlock* blockA, BasicBlock* blockB) {

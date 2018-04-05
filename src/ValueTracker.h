@@ -6,6 +6,8 @@
 #include <functional>
 #include "llvm/IR/Instruction.h"
 
+using namespace llvm;
+
 class ValueTracker {
     private:
         std::unordered_map<std::string, double> variablesTracker;
