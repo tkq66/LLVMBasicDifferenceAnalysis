@@ -117,8 +117,7 @@ void generateCFG (BasicBlock* BB, SeparationTracker* separationTracker, std::sta
           !newLoopCallStack.empty()) {
           // prevent repeating backedge analysis loop
           newBackedgeSwitch = OFF;
-          // Run while cond again, now with knowledge of all the discovered secret var args of the first run,
-          // and update the local secret var args context to propagate this knowledge to code after the loop
+          generateCFG(next, separationTracker, newLoopCallStack, newBackedgeSwitch);
       }
       // Terminate looping condition to acheive least fixed point solution
       if (isSameBlock(prevLoopBegin, next)) {
@@ -130,7 +129,6 @@ void generateCFG (BasicBlock* BB, SeparationTracker* separationTracker, std::sta
 
   separationTracker->printSeparationReport();
 
-  // Propagate discovered secret var args from the current context
   return;
 }
 
