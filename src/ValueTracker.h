@@ -12,10 +12,6 @@ class ValueTracker {
     private:
         std::unordered_map<std::string, double> variablesTracker;
 
-        void allocateNewVariable(AllocaInst* i);
-        void storeValueIntoVariable(StoreInst* i);
-        void loadVariableIntoRegister(LoadInst* i);
-        void processCalculation(BinaryOperator* i);
         void calculateArithmetic(BinaryOperator* i, std::function<double(double, double)> callback);
         double addCallback(double accumulator, double current);
         double subCallback(double accumulator, double current);
@@ -24,6 +20,13 @@ class ValueTracker {
     public:
         void printTracker();
         void processNewEntry(Instruction *i);
+        double selectVariable(std::string name);
+        void editVariable(std::string name, double value);
+
+        void allocateNewVariable(AllocaInst* i);
+        void storeValueIntoVariable(StoreInst* i);
+        void loadVariableIntoRegister(LoadInst* i);
+        void processCalculation(BinaryOperator* i);
 };
 
 #endif

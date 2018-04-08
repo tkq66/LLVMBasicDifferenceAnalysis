@@ -21,7 +21,7 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
-#include "ValueTracker.h"
+#include "SeparationTracker.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -32,8 +32,6 @@
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
 #define MAIN_FUNCTION "main"
-#define SRC_VAR_NAME "source"
-#define SNK_VAR_NAME "sink"
 #define LOOP_BEGIN_BLOCK_NAME "while.cond"
 #define LOOP_END_BLOCK_NAME "while.end"
 
@@ -44,15 +42,12 @@ enum AnalyzeLoopBackedgeSwtch {
     OFF
 };
 
-void generateCFG (BasicBlock*, ValueTracker valueTracker, std::stack<BasicBlock*>, AnalyzeLoopBackedgeSwtch);
-void checkLeakage (BasicBlock*, ValueTracker valueTracker);
+void generateCFG (BasicBlock*, SeparationTracker* separationTracker, std::stack<BasicBlock*>, AnalyzeLoopBackedgeSwtch);
+void analyzeDifference (BasicBlock*, SeparationTracker* separationTracker);
 bool isSameBlock (BasicBlock*, BasicBlock*);
 bool isMainFunction (const char*);
 bool isBeginLoop (const char*);
 bool isEndLoop (const char*);
-bool isSourceVar (const char*);
-bool isSinkVar (const char*);
-bool isSinkVar (const char*);
 void printVars (std::set<Instruction*>);
 void printInsts(std::set<Instruction*>);
 void printLLVMValue (Value* v);
@@ -67,13 +62,13 @@ int main (int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    ValueTracker valueTracker;
+    SeparationTracker* separationTracker = new SeparationTracker(argv[2], argv[3]);
 
     for (auto &F: *M) {
         if (isMainFunction(F.getName().str().c_str())) {
             BasicBlock* BB = dyn_cast<BasicBlock>(F.begin());
             std::stack<BasicBlock*> loopCallStack;
-            generateCFG(BB, valueTracker, loopCallStack, ON);
+            generateCFG(BB, separationTracker, loopCallStack, ON);
         }
     }
 
@@ -81,7 +76,7 @@ int main (int argc, char **argv) {
 }
 
 
-void generateCFG (BasicBlock* BB, ValueTracker valueTracker, std::stack<BasicBlock*> loopCallStack, AnalyzeLoopBackedgeSwtch backedgeSwitch) {
+void generateCFG (BasicBlock* BB, SeparationTracker* separationTracker, std::stack<BasicBlock*> loopCallStack, AnalyzeLoopBackedgeSwtch backedgeSwitch) {
   const char *blockName = BB->getName().str().c_str();
   printf("Label Name:%s\n", blockName);
 
@@ -100,7 +95,7 @@ void generateCFG (BasicBlock* BB, ValueTracker valueTracker, std::stack<BasicBlo
       newBackedgeSwitch = ON;
   }
 
-  checkLeakage(BB, valueTracker);
+  analyzeDifference(BB, separationTracker);
 
   // Pass secretVars list to child BBs and check them
   const TerminatorInst *tInst = BB->getTerminator();
@@ -130,20 +125,21 @@ void generateCFG (BasicBlock* BB, ValueTracker valueTracker, std::stack<BasicBlo
           return;
       }
       // Analyze the next instruction and get all the discovered from that analysis context
-      generateCFG(next, valueTracker, newLoopCallStack, newBackedgeSwitch);
+      generateCFG(next, separationTracker, newLoopCallStack, newBackedgeSwitch);
   }
 
-  valueTracker.printTracker();
+  separationTracker->printSeparationReport();
 
   // Propagate discovered secret var args from the current context
   return;
 }
 
-void checkLeakage (BasicBlock* BB, ValueTracker valueTracker) {
+void analyzeDifference (BasicBlock* BB, SeparationTracker* separationTracker) {
     // Loop through instructions in BB
+    double separation;
     for (auto &I: *BB) {
-        valueTracker.processNewEntry(&I);
-        valueTracker.printTracker();
+        separation = separationTracker->processNewEntry(&I);
+        separationTracker->printSeparationReport();
     }
     return;
 }
@@ -166,14 +162,6 @@ bool isBeginLoop (const char* instructionName) {
 
 bool isEndLoop (const char* instructionName) {
     return strncmp(instructionName, LOOP_END_BLOCK_NAME, strlen(LOOP_END_BLOCK_NAME)) == 0;
-}
-
-bool isSourceVar (const char* varName) {
-    return strncmp(varName, SRC_VAR_NAME, strlen(SRC_VAR_NAME)) == 0;
-}
-
-bool isSinkVar (const char* varName) {
-    return strncmp(varName, SNK_VAR_NAME, strlen(SNK_VAR_NAME)) == 0;
 }
 
 void printVars (std::set<Instruction*> vars) {

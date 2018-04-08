@@ -11,13 +11,19 @@
 #include "llvm/IR/Constants.h"
 #include "ValueTracker.h"
 
-using namespace llvm;
-
 void ValueTracker::printTracker() {
     for (auto variable = variablesTracker.begin(); variable != variablesTracker.end(); ++variable) {
         printf("Key: %s - Value: %lf\n", variable->first.c_str(), variable->second);
     }
     printf("\n");
+}
+
+double ValueTracker::selectVariable(std::string name) {
+    return (variablesTracker.find(name) != variablesTracker.end()) ? variablesTracker[name] : std::nan("inifinity");
+}
+
+void ValueTracker::editVariable(std::string name, double value) {
+    variablesTracker[name] = value;
 }
 
 void ValueTracker::processNewEntry(Instruction* i) {
@@ -53,7 +59,7 @@ void ValueTracker::storeValueIntoVariable(StoreInst* i) {
     }
     else {
         ConstantInt* ci = dyn_cast<ConstantInt>(i->getOperand(0));
-        src = ci->getZExtValue();
+        src = ci->getSExtValue();
     }
     std::string dest = i->getOperand(1)->getName().str();
     variablesTracker[dest] = src;
